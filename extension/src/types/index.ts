@@ -30,6 +30,7 @@ export interface ExtractedArticle {
   claims: Claim[];
   bias_estimate: string;
   emotional_language: string[];
+  is_satire?: boolean;
 }
 
 export interface AnalysisResponse {

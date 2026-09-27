@@ -4,7 +4,7 @@ from typing import List, Optional
 class Claim(BaseModel):
     id: str
     text: str
-    importance: str = Field(description="Low, Medium, High")
+    importance: str = Field(default="Medium", description="Low, Medium, High")
 
 class ExtractedArticle(BaseModel):
     title: str
@@ -14,6 +14,7 @@ class ExtractedArticle(BaseModel):
     claims: List[Claim]
     bias_estimate: str
     emotional_language: List[str]
+    is_satire: bool = Field(default=False)
 
 class Evidence(BaseModel):
     url: str

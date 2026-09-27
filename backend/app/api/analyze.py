@@ -13,11 +13,8 @@ async def analyze_article(request: AnalyzeRequest):
         # 1. Extract claims and metadata
         article_info = extract_article_info(request.title, request.text_content)
         
-        # 2. Verify each claim
-        verifications = []
-        for claim in article_info.claims:
-            verif = verify_claim(claim)
-            verifications.append(verif)
+        # 2. Verify each claim sequentially to avoid TPM rate limits
+        verifications = [verify_claim(claim) for claim in article_info.claims]
             
         # 3. Calculate score
         score, explanation = calculate_credibility_score(article_info, verifications)
