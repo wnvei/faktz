@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 from app.models.schemas import ClaimVerification, ExtractedArticle
 
 # Weight multipliers by claim importance
@@ -7,12 +7,12 @@ _IMPORTANCE_WEIGHT = {"High": 3, "Medium": 2, "Low": 1}
 # Score deltas per status (applied before importance weighting)
 _STATUS_DELTA = {
     "Verified": 0,
-    "Partially Verified": -8,
-    "Needs More Evidence": -10,
-    "Out of Context": -15,
-    "Opinion": -5,
-    "Misleading": -20,
-    "Contradicted": -30,
+    "Partially Verified": -40,
+    "Needs More Evidence": -50,
+    "Out of Context": -60,
+    "Opinion": -30,
+    "Misleading": -80,
+    "Contradicted": -100,
 }
 
 def _get_importance(claim_id: str, article: ExtractedArticle) -> str:
@@ -24,13 +24,13 @@ def _get_importance(claim_id: str, article: ExtractedArticle) -> str:
 def calculate_credibility_score(
     article: ExtractedArticle,
     verifications: List[ClaimVerification],
-) -> Tuple[int, str]:
+) -> Tuple[int, str, str, List[str]]:
 
     if article.is_satire:
-        return 5, "This article appears to be satire or parody and should not be taken as factual news."
+        return 5, "This article appears to be satire or parody and should not be taken as factual news.", "This is a satirical article.", ["⚠ Satire / Parody"]
 
     if not verifications:
-        return 50, "No claims could be extracted or verified — maintaining a neutral score."
+        return 50, "No claims could be extracted or verified — maintaining a neutral score.", "No verifiable claims found.", ["⚠ Insufficient claims"]
 
     # --- Weighted scoring ---
     total_weight = 0
@@ -88,6 +88,14 @@ def calculate_credibility_score(
     if article.bias_estimate in ("Left", "Right"):
         base_score -= 5
 
+    # Narrative / Omissions penalty
+    if article.omissions_detected:
+        base_score -= 8
+    
+    # Check if Narrative Conclusion exists but claims are weak
+    if article.narrative_conclusion and base_score < 60:
+        base_score -= 10 # Unsupported narrative conclusion
+
     final_score = max(0, min(100, round(base_score)))
 
     # --- Explanation ---
@@ -110,12 +118,35 @@ def calculate_credibility_score(
 
     if final_score >= 80:
         summary = "The article is highly credible — most claims are well-supported by evidence."
+        short = "Highly Credible. Claims are well-supported."
     elif final_score >= 60:
         summary = "The article has moderate credibility. Some claims are disputed or lack evidence."
+        short = "Mostly Credible, but with some unverified or disputed claims."
     elif final_score >= 40:
         summary = "The article has questionable credibility. Multiple claims are misleading or contradicted."
+        short = "Mixed or Misleading. Contains disputed claims or lacks context."
     else:
         summary = "The article has very low credibility. Key claims are contradicted by evidence."
+        short = "Low Credibility. Key claims are contradicted."
 
     explanation = summary + (" " + " ".join(parts) if parts else "")
-    return final_score, explanation
+    
+    # --- Key Reasons ---
+    reasons = []
+    if final_score >= 70:
+        reasons.append("✓ Strong supporting evidence for main claims")
+    if len(article.omissions_detected) > 0:
+        reasons.append("⚠ Missing context or selective statistics")
+    if len(high_importance_issues) > 0:
+        reasons.append(f"⚠ {len(high_importance_issues)} significant contradiction(s) found")
+    elif status_counts.get("Contradicted", 0) > 0:
+        reasons.append("⚠ Contradictory evidence exists for some claims")
+    if article.narrative_conclusion and final_score < 60:
+        reasons.append("⚠ Overall conclusion unsupported by verifiable facts")
+    if not reasons and final_score >= 60:
+        reasons.append("✓ No major contradictions found")
+    
+    # Limit to top 3-4
+    reasons = reasons[:4]
+
+    return final_score, explanation, short, reasons

@@ -63,54 +63,40 @@ Return ONLY this JSON (no markdown, no explanation, no trailing text):
   "claims": [
     {{
       "id": "c1",
-      "text": "string (specific, verifiable factual claim, max 30 words)",
-      "importance": "High"
+      "text": "string (specific claim, max 30 words)",
+      "importance": "High",
+      "type": "Fact"
     }},
     {{
       "id": "c2",
       "text": "string",
-      "importance": "High"
+      "importance": "High",
+      "type": "Causal"
     }},
     {{
       "id": "c3",
       "text": "string",
-      "importance": "High"
-    }},
-    {{
-      "id": "c4",
-      "text": "string",
-      "importance": "Medium"
-    }},
-    {{
-      "id": "c5",
-      "text": "string",
-      "importance": "Medium"
-    }},
-    {{
-      "id": "c6",
-      "text": "string",
-      "importance": "Low"
-    }},
-    {{
-      "id": "c7",
-      "text": "string",
-      "importance": "Low"
+      "importance": "Medium",
+      "type": "Inference"
     }}
   ],
   "bias_estimate": "Center",
   "emotional_language": ["string"],
-  "is_satire": false
+  "is_satire": false,
+  "omissions_detected": ["string (e.g. missing qualifier, timeframe, opposing evidence)"],
+  "narrative_conclusion": "string (The broader interpretation built from the claims)"
 }}
 
 Rules:
-- Extract UP TO 7 verifiable factual claims. Include as many as the article contains, up to 7.
-- Claims must be specific, falsifiable assertions — NOT opinions or predictions.
+- Extract UP TO 7 claims. Include as many as the article contains, up to 7.
+- type must be exactly one of: Fact, Inference, Opinion, Causal, Narrative.
+- Separate Facts (directly asserted) from Inferences (derived conclusions) and Opinions.
 - Prioritize claims that are CONTROVERSIAL or where mainstream narrative may OMIT or CONTRADICT other well-known facts.
-- Flag claims that seem one-sided or that ignore widely-reported counter-evidence.
 - importance must be exactly "High", "Medium", or "Low". High = central to the article's argument.
 - bias_estimate must be one of: Left, Center Left, Center, Center Right, Right, Unknown.
-- is_satire must be a boolean (true or false), not a string.
-- If the article has fewer than 7 verifiable claims, return only as many as genuinely exist.
+- is_satire must be a boolean.
+- Use omissions_detected to flag if there is important missing context (e.g., selective statistics, missing denominator). Leave empty if none.
+- Use narrative_conclusion to describe the overall conclusion the article builds.
 - Return ONLY the JSON object, nothing else."""
 
     try:
@@ -138,6 +124,8 @@ Rules:
             bias_estimate="Unknown",
             emotional_language=[],
             is_satire=False,
+            omissions_detected=[],
+            narrative_conclusion=""
         )
 
     # Sanitize is_satire — model sometimes returns a string
@@ -153,6 +141,8 @@ Rules:
     data.setdefault("bias_estimate", "Unknown")
     data.setdefault("emotional_language", [])
     data.setdefault("is_satire", False)
+    data.setdefault("omissions_detected", [])
+    data.setdefault("narrative_conclusion", "")
 
     try:
         return ExtractedArticle(**data)
@@ -167,4 +157,6 @@ Rules:
             bias_estimate="Unknown",
             emotional_language=[],
             is_satire=False,
+            omissions_detected=[],
+            narrative_conclusion=""
         )

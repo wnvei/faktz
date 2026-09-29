@@ -20,7 +20,7 @@ _MEDIUM_CREDIBILITY = {
     "foxnews.com", "politico.com", "thehill.com", "axios.com",
     "time.com", "newsweek.com", "forbes.com", "bloomberg.com",
     "npr.org", "pbs.org", "vox.com", "theatlantic.com",
-    "middleeasteye.net", "haaretz.com", "timesofisrael.com",
+    "middleeasteye.net", "haaretz.com",
 }
 _FACT_CHECK_SITES = {
     "factcheck.org", "politifact.com", "snopes.com",
@@ -39,8 +39,9 @@ def _domain_credibility(url: str) -> int:
         return 85
     if domain in _MEDIUM_CREDIBILITY:
         return 65
-    # Unknown domain — lower trust
-    return 40
+    # Treat independent, local, or unknown domains fairly by default
+    # to avoid mainstream media bias or censorship blindspots.
+    return 75
 
 def _search(query: str, max_results: int = 5) -> list[Evidence]:
     """Run a single Tavily search and return Evidence objects."""
@@ -73,18 +74,26 @@ def _search(query: str, max_results: int = 5) -> list[Evidence]:
 def fetch_evidence_for_claim(claim_text: str) -> tuple[list[Evidence], list[Evidence]]:
     """
     Returns (supporting_pool, counter_pool).
-    supporting_pool: standard evidence search
-    counter_pool:    explicit counter-narrative / debunking search
+    supporting_pool: standard evidence search + primary source search
+    counter_pool:    explicit counter-narrative / debunking search + fact checks
     """
-    # Primary: straight claim search
-    supporting_pool = _search(claim_text, max_results=5)
+    # Primary: straight claim search + primary records
+    supporting_pool = _search(f'{claim_text}', max_results=4)
+    primary_pool = _search(f'{claim_text} (document OR report OR statement OR record OR data)', max_results=2)
+    supporting_pool.extend(primary_pool)
 
-    # Counter: search for contradictions, rebuttals, alternative accounts
-    counter_query = f'"{claim_text}" debunked OR contradicted OR false OR "in reality" OR "actually" OR misleading'
+    # Counter: search for contradictions, rebuttals, alternative accounts, fact checks
+    counter_query = f'"{claim_text}" (debunked OR contradicted OR false OR misleading)'
     counter_pool = _search(counter_query, max_results=4)
+    fact_check_pool = _search(f'{claim_text} site:factcheck.org OR site:politifact.com OR site:snopes.com OR site:fullfact.org', max_results=2)
+    counter_pool.extend(fact_check_pool)
 
     # Deduplicate counter pool against primary (by URL)
     primary_urls = {e.url for e in supporting_pool}
     counter_pool = [e for e in counter_pool if e.url not in primary_urls]
+    
+    # Deduplicate within pools
+    supporting_pool = list({e.url: e for e in supporting_pool}.values())
+    counter_pool = list({e.url: e for e in counter_pool}.values())
 
     return supporting_pool, counter_pool

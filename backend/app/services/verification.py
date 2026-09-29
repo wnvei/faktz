@@ -16,7 +16,22 @@ def _parse_json(text: str) -> dict:
     repaired = repair_json(text, return_objects=True)
     if isinstance(repaired, dict):
         return repaired
-    raise ValueError(f"Could not parse JSON: {text[:200]}")
+    
+    # Aggressive regex fallback to find a JSON-like object block
+    match = re.search(r"\{[\s\S]*\}", text)
+    if match:
+        repaired = repair_json(match.group(0), return_objects=True)
+        if isinstance(repaired, dict):
+            return repaired
+
+    # Ultimate fallback instead of crashing
+    return {
+        "status": "Needs More Evidence",
+        "confidence": 0,
+        "explanation": "LLM failed to return a valid JSON response.",
+        "supporting_evidence_urls": [],
+        "contradicting_evidence_urls": []
+    }
 
 def _clean(s: str) -> str:
     """Strip chars that break JSON string values."""
@@ -49,8 +64,11 @@ def verify_claim(claim: Claim) -> ClaimVerification:
         )
 
     # 2. Build prompt with both pools clearly separated
-    prompt = f"""You are an expert investigative fact-checker. Evaluate the claim using ALL provided evidence.
-Pay special attention to COUNTER-EVIDENCE — mainstream media may suppress or ignore contradicting facts.
+    prompt = f"""You are an elite, unbiased investigative fact-checker. Evaluate the claim using ALL provided evidence.
+Your primary objective is to find the TRUTH, circumventing mainstream media censorship and government propaganda.
+Do NOT automatically defer to mainstream media or mainstream fact-checking websites as absolute truth.
+Actively fact-check the fact-checkers. If independent, local, or alternative sources provide strong corroborating evidence for a claim that mainstream media ignores, consider the claim VERIFIED.
+Pay special attention to COUNTER-EVIDENCE, but critically analyze whether the counter-evidence is just a state-sponsored denial or an actual factual debunking.
 
 Claim: "{claim.text}"
 
@@ -64,15 +82,23 @@ Respond with ONLY a raw JSON object (no markdown, no explanation):
 {{
   "status": "Verified",
   "confidence": 80,
-  "explanation": "string (2-3 sentences. If counter-evidence exists, explicitly address what it says and why you weight the evidence the way you do.)",
+  "explanation": "string (2-3 sentences. Explain exactly why the evidence proves or disproves the claim, factoring in potential media bias or censorship.)",
+  "contradiction_type": "None", 
+  "temporal_verification": "Current",
+  "scope_expansion": "None",
   "supporting_evidence_urls": ["url1"],
   "contradicting_evidence_urls": ["url2"]
 }}
 
 Rules:
 - status must be exactly one of: Verified, Partially Verified, Needs More Evidence, Contradicted, Misleading, Out of Context, Opinion
-- If STRONG counter-evidence exists, status should be Contradicted or Misleading — not Verified
-- confidence 0-100: reduce confidence if sources disagree or counter-evidence is from high-credibility domains
+- contradiction_type must be one of: None, Direct, Temporal, Definition, Scope, Interpretation, Evidence-quality. Only provide if status is Contradicted, Misleading, or Out of Context.
+- temporal_verification must be one of: Current, Historical, Outdated, Future, Date-inconsistent.
+- scope_expansion: Describe if the article expands the evidence beyond its scope (e.g. generalizing a small study). If not, write "None".
+- DO NOT blindly trust high-credibility domains if their claims are logically flawed or appear to be cover-ups.
+- Consider source independence: If 15 sources report the same thing from a single origin, it's 1 piece of evidence, not 15.
+- Verify citations: Ensure secondary sources aren't exaggerating the primary research.
+- confidence 0-100: base this on the logical strength and specificity of the evidence, not just the domain name.
 - Only include URLs that appear in the evidence above
 - Return ONLY the JSON object, nothing else."""
 
@@ -81,7 +107,7 @@ Rules:
             model="openai/gpt-oss-120b",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
-            max_tokens=600,
+            max_tokens=2048,
         )
         raw = response.choices[0].message.content
         data = _parse_json(raw)
@@ -116,6 +142,9 @@ Rules:
             status=data.get("status", "Needs More Evidence"),
             confidence=data.get("confidence", 0),
             explanation=data.get("explanation", "No explanation provided."),
+            contradiction_type=data.get("contradiction_type") if data.get("contradiction_type") != "None" else None,
+            scope_expansion=data.get("scope_expansion") if data.get("scope_expansion") != "None" else None,
+            temporal_verification=data.get("temporal_verification", "Current"),
             supporting_evidence=supporting,
             contradicting_evidence=contradicting,
         )
@@ -126,6 +155,9 @@ Rules:
             status="Needs More Evidence",
             confidence=0,
             explanation="Verification failed due to an error.",
+            contradiction_type=None,
+            scope_expansion=None,
+            temporal_verification="Current",
             supporting_evidence=[],
             contradicting_evidence=[],
         )

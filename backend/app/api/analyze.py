@@ -17,13 +17,15 @@ async def analyze_article(request: AnalyzeRequest):
         verifications = [verify_claim(claim) for claim in article_info.claims]
             
         # 3. Calculate score
-        score, explanation = calculate_credibility_score(article_info, verifications)
+        score, explanation, short_summary, key_reasons = calculate_credibility_score(article_info, verifications)
         
         return AnalysisResponse(
             article=article_info,
             verifications=verifications,
             overall_score=score,
-            score_explanation=explanation
+            score_explanation=explanation,
+            short_summary=short_summary,
+            key_reasons=key_reasons
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -6,21 +6,41 @@ let marker: Mark | null = null;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'EXTRACT_ARTICLE') {
-    // Clone document to avoid modifying original while parsing
     const documentClone = document.cloneNode(true) as Document;
-    const reader = new Readability(documentClone);
-    const article = reader.parse();
     
-    if (article) {
-      sendResponse({
-        title: article.title,
-        textContent: article.textContent,
-        htmlContent: article.content,
-        url: window.location.href
-      });
-    } else {
-      sendResponse({ error: 'Could not extract article content.' });
+    // Try to extract media
+    let mediaUrl = null;
+    const ogImage = document.querySelector('meta[property="og:image"]');
+    const ogVideo = document.querySelector('meta[property="og:video"]');
+    if (ogVideo) mediaUrl = ogVideo.getAttribute('content');
+    else if (window.location.hostname.includes('youtube.com')) mediaUrl = window.location.href;
+    else if (ogImage) mediaUrl = ogImage.getAttribute('content');
+
+    let title = document.title;
+    let textContent = '';
+    let htmlContent = document.body.innerHTML;
+
+    try {
+      const reader = new Readability(documentClone);
+      const article = reader.parse();
+      if (article) {
+        title = article.title || title;
+        textContent = article.textContent;
+        htmlContent = article.content;
+      } else {
+        textContent = document.body.innerText;
+      }
+    } catch (e) {
+      textContent = document.body.innerText;
     }
+
+    sendResponse({
+      title: title,
+      textContent: textContent.substring(0, 50000), // Limit size
+      htmlContent: htmlContent.substring(0, 50000),
+      url: window.location.href,
+      mediaUrl: mediaUrl
+    });
   } else if (message.type === 'HIGHLIGHT_CLAIMS') {
     const claims = message.claims; // Array of { text: string, status: string, id: string }
     

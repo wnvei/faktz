@@ -2,6 +2,7 @@ export interface Claim {
   id: string;
   text: string;
   importance: string;
+  type?: string;
 }
 
 export interface Evidence {
@@ -11,6 +12,8 @@ export interface Evidence {
   publisher: string;
   credibility_score: number;
   is_primary_source: boolean;
+  is_independent?: boolean;
+  original_origin?: string;
 }
 
 export interface ClaimVerification {
@@ -18,6 +21,9 @@ export interface ClaimVerification {
   status: string;
   confidence: number;
   explanation: string;
+  contradiction_type?: string;
+  scope_expansion?: string;
+  temporal_verification?: string;
   supporting_evidence: Evidence[];
   contradicting_evidence: Evidence[];
 }
@@ -31,6 +37,8 @@ export interface ExtractedArticle {
   bias_estimate: string;
   emotional_language: string[];
   is_satire?: boolean;
+  omissions_detected?: string[];
+  narrative_conclusion?: string;
 }
 
 export interface AnalysisResponse {
@@ -38,4 +46,6 @@ export interface AnalysisResponse {
   verifications: ClaimVerification[];
   overall_score: number;
   score_explanation: string;
+  short_summary?: string;
+  key_reasons?: string[];
 }
